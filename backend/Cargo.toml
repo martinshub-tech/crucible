@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+url = { version = "2", features = ["serde"] }
 # Web framework
 axum = { version = "0.7", features = ["macros"] }
 tower = { version = "0.4", features = ["full"] }
