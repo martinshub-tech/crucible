@@ -67,7 +67,11 @@ impl ContractMonitor {
     pub async fn list_rules(&self, contract_address: Option<&str>) -> Vec<MonitorRule> {
         let rules = self.rules.read().await;
         match contract_address {
-            Some(addr) => rules.iter().filter(|r| r.contract_address == addr).cloned().collect(),
+            Some(addr) => rules
+                .iter()
+                .filter(|r| r.contract_address == addr)
+                .cloned()
+                .collect(),
             None => rules.clone(),
         }
     }
@@ -80,7 +84,10 @@ impl ContractMonitor {
         let rules = self.rules.read().await;
         let mut new_alerts = Vec::new();
 
-        for rule in rules.iter().filter(|r| r.enabled && r.contract_address == contract_address) {
+        for rule in rules
+            .iter()
+            .filter(|r| r.enabled && r.contract_address == contract_address)
+        {
             if metric_value > rule.threshold {
                 let severity = if metric_value > rule.threshold * 2.0 {
                     "critical"
