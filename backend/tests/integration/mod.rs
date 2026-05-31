@@ -14,15 +14,26 @@ use axum::{
 };
 use backend::{
     api::handlers::profiling::{get_system_status, trigger_profile_collection, AppState},
-    services::{error_recovery::ErrorManager, sys_metrics::MetricsExporter},
+    config::{reload::ConfigManager, AppConfig},
+    services::{
+        contract_benchmark::ContractBenchmarkService, error_recovery::ErrorManager,
+        log_aggregator::LogAggregator, sys_metrics::MetricsExporter,
+    },
 };
+use redis::Client as RedisClient;
 use std::sync::Arc;
 
 /// Build a test [`Router`] backed by fresh service instances.
 pub fn test_app() -> Router {
+    let (log_aggregator, _receiver) = LogAggregator::new();
     let state = Arc::new(AppState {
+        db: None,
         metrics_exporter: Arc::new(MetricsExporter::new()),
         error_manager: Arc::new(ErrorManager::new()),
+        config_manager: Arc::new(ConfigManager::new(AppConfig::default())),
+        log_aggregator: Arc::new(log_aggregator),
+        contract_benchmark_service: Arc::new(ContractBenchmarkService::new()),
+        redis: RedisClient::open("redis://127.0.0.1:1/").unwrap(),
     });
 
     Router::new()

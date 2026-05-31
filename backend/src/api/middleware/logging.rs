@@ -75,13 +75,14 @@ pub async fn logging_middleware(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{reload::ConfigManager, AppConfig};
     use crate::services::{
-        error_recovery::ErrorManager, log_aggregator::LogAggregator, sys_metrics::MetricsExporter,
+        contract_benchmark::ContractBenchmarkService, error_recovery::ErrorManager,
+        log_aggregator::LogAggregator, sys_metrics::MetricsExporter,
     };
     use axum::{routing::get, Router};
     use hyper::StatusCode;
     use redis::Client as RedisClient;
-    use sqlx::PgPool;
     use tower::ServiceExt;
 
     #[tokio::test]
@@ -92,15 +93,15 @@ mod tests {
         let (log_aggregator, _rx) = LogAggregator::new();
         let log_aggregator = Arc::new(log_aggregator);
 
-        // Use connect_lazy for testing to avoid needing a real DB
-        let db = PgPool::connect_lazy("postgres://localhost/test").unwrap();
         let redis = RedisClient::open("redis://localhost").unwrap();
 
         let state = Arc::new(AppState {
+            db: None,
             metrics_exporter,
             error_manager,
+            config_manager: Arc::new(ConfigManager::new(AppConfig::default())),
             log_aggregator,
-            db,
+            contract_benchmark_service: Arc::new(ContractBenchmarkService::new()),
             redis,
         });
 

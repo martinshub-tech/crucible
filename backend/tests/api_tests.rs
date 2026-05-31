@@ -6,9 +6,28 @@ use axum::{
     Router,
 };
 use backend::api::handlers::profiling::{get_system_status, AppState};
-use backend::services::{error_recovery::ErrorManager, sys_metrics::MetricsExporter};
+use backend::config::{reload::ConfigManager, AppConfig};
+use backend::services::{
+    contract_benchmark::ContractBenchmarkService, error_recovery::ErrorManager,
+    log_aggregator::LogAggregator, sys_metrics::MetricsExporter,
+};
+use redis::Client as RedisClient;
 use std::sync::Arc;
 use tower::ServiceExt;
+
+fn test_state() -> Arc<AppState> {
+    let (log_aggregator, _receiver) = LogAggregator::new();
+
+    Arc::new(AppState {
+        db: None,
+        metrics_exporter: Arc::new(MetricsExporter::new()),
+        error_manager: Arc::new(ErrorManager::new()),
+        config_manager: Arc::new(ConfigManager::new(AppConfig::default())),
+        log_aggregator: Arc::new(log_aggregator),
+        contract_benchmark_service: Arc::new(ContractBenchmarkService::new()),
+        redis: RedisClient::open("redis://127.0.0.1:1/").unwrap(),
+    })
+}
 
 #[tokio::test]
 async fn test_health_check_integration() {
@@ -30,11 +49,7 @@ async fn test_stellar_toml_headers() {
 
 #[tokio::test]
 async fn test_get_status_endpoint() {
-    let state = Arc::new(AppState {
-        db: None,
-        metrics_exporter: Arc::new(MetricsExporter::new()),
-        error_manager: Arc::new(ErrorManager::new()),
-    });
+    let state = test_state();
 
     let app = Router::new()
         .route("/api/status", get(get_system_status))

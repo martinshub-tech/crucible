@@ -15,6 +15,7 @@ use backend::{
     },
     jobs::{monitor_transaction, TransactionMonitorJob},
     services::{
+        contract_benchmark::ContractBenchmarkService,
         error_recovery::ErrorManager,
         log_aggregator::LogAggregator,
         log_alerts::AlertManager,
@@ -86,6 +87,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let alert_manager = Arc::new(AlertManager::new());
     let (log_aggregator, log_receiver) = LogAggregator::new();
     let log_aggregator = Arc::new(log_aggregator);
+    let contract_benchmark_service = Arc::new(ContractBenchmarkService::new());
 
     tokio::spawn(MetricsExporter::run_collector(metrics_exporter.clone()));
     tokio::spawn(LogAggregator::run_worker(log_receiver));
@@ -114,18 +116,17 @@ async fn main() -> Result<(), anyhow::Error> {
         metrics_exporter: metrics_exporter.clone(),
         error_manager: error_manager.clone(),
         config_manager: config_manager.clone(),
+        log_aggregator: log_aggregator.clone(),
+        contract_benchmark_service: contract_benchmark_service.clone(),
+        redis: redis_client.clone(),
     });
 
     // Create dashboard state
     let dashboard_state = Arc::new(DashboardState {
         metrics_exporter,
         error_manager,
-        config_manager: config_manager.clone(),
         alert_manager,
-        log_aggregator,
         redis: redis_client,
-        db: db_pool,
-        redis_conn: redis_conn_dashboard, // Depending on what DashboardState actually expects
     });
 
     // OpenAPI docs
@@ -168,6 +169,10 @@ async fn main() -> Result<(), anyhow::Error> {
                 .route("/prometheus", get(profiling::get_prometheus_metrics))
                 .route("/status", get(profiling::get_system_status))
                 .route("/profile", post(profiling::trigger_profile_collection))
+                .route(
+                    "/contracts/benchmark",
+                    post(profiling::run_contract_benchmark),
+                )
                 .with_state(state.clone()),
         )
         .nest(
@@ -241,11 +246,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
             // Close database connection pool
             tracing::info!("Closing database connection pool");
-            drop(state.db); // This closes the pool
+            drop(db_pool); // This closes the pool when all clones are released
 
             // Close Redis connection
             tracing::info!("Closing Redis connection");
-            drop(state.redis); // This closes the connection manager
+            drop(redis_conn_dashboard); // This closes the dashboard connection manager
 
             tracing::info!("Graceful shutdown completed successfully");
 

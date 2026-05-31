@@ -96,9 +96,3 @@ opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
-
-[[bin]]
-name = "backup"
-path = "src/bin/backup.rs"
-[features]
-testutils = ["mockall"]
