@@ -2,6 +2,7 @@ use crate::api::contracts::{
     ApiResponse, ProfileTriggerRequest, ProfileTriggerResponse, SystemStatus, ValidatedJson,
 };
 use crate::config::reload::ConfigManager;
+use crate::error::AppError;
 use crate::services::{
     contract_benchmark::{
         ContractBenchmarkError, ContractBenchmarkReport, ContractBenchmarkRequest,
