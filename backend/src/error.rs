@@ -177,7 +177,10 @@ mod tests {
     #[test]
     fn test_length_required_error_display() {
         let err = AppError::LengthRequired("Content-Length header required".into());
-        assert_eq!(err.to_string(), "Length required: Content-Length header required");
+        assert_eq!(
+            err.to_string(),
+            "Length required: Content-Length header required"
+        );
     }
 
     #[test]

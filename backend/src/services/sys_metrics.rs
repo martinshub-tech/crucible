@@ -194,12 +194,24 @@ impl BuildMetricsService {
 
         let metrics: Vec<BuildMetric> = rows
             .into_iter()
-            .map(
-                |(
-                    id,
+            .map(|row| {
+                use sqlx::Row;
+                let id: Uuid = row.get("id");
+                let project_name: String = row.get("project_name");
+                let build_id: String = row.get("build_id");
+                let status_str: String = row.get("build_status");
+                let compilation_time_ms: i64 = row.get("compilation_time_ms");
+                let dependency_count: i32 = row.get("dependency_count");
+                let cache_hit_rate: Option<Decimal> = row.get("cache_hit_rate");
+                let cpu_usage: Option<Decimal> = row.get("cpu_usage");
+                let memory_usage_mb: Option<i64> = row.get("memory_usage_mb");
+                let build_timestamp: DateTime<Utc> = row.get("build_timestamp");
+
+                BuildMetric {
+                    id: Some(id),
                     project_name,
                     build_id,
-                    status_str,
+                    build_status: BuildStatus::from_str(&status_str).unwrap_or(BuildStatus::Failed),
                     compilation_time_ms,
                     dependency_count,
                     cache_hit_rate,
@@ -312,12 +324,24 @@ impl BuildMetricsService {
 
         Ok(rows
             .into_iter()
-            .map(
-                |(
-                    id,
+            .map(|row| {
+                use sqlx::Row;
+                let id: Uuid = row.get("id");
+                let project_name: String = row.get("project_name");
+                let build_id: String = row.get("build_id");
+                let status_str: String = row.get("build_status");
+                let compilation_time_ms: i64 = row.get("compilation_time_ms");
+                let dependency_count: i32 = row.get("dependency_count");
+                let cache_hit_rate: Option<Decimal> = row.get("cache_hit_rate");
+                let cpu_usage: Option<Decimal> = row.get("cpu_usage");
+                let memory_usage_mb: Option<i64> = row.get("memory_usage_mb");
+                let build_timestamp: DateTime<Utc> = row.get("build_timestamp");
+
+                BuildMetric {
+                    id: Some(id),
                     project_name,
                     build_id,
-                    status_str,
+                    build_status: BuildStatus::from_str(&status_str).unwrap_or(BuildStatus::Failed),
                     compilation_time_ms,
                     dependency_count,
                     cache_hit_rate,

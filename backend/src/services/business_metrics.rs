@@ -8,7 +8,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Duration, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -21,7 +21,36 @@ use crate::error::AppError;
 // Domain types
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+impl BusinessMetric {
+    pub fn from_row(row: &sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        let id: Uuid = row.try_get("id")?;
+        let name: String = row.try_get("name")?;
+        let value: Decimal = row.try_get("value")?;
+        let unit: String = row.try_get("unit")?;
+        let category_str: String = row.try_get("category")?;
+        let tags_val: serde_json::Value = row.try_get("tags")?;
+        let recorded_at: DateTime<Utc> = row.try_get("recorded_at")?;
+        let source_str: String = row.try_get("source")?;
+
+        let tags: HashMap<String, String> = serde_json::from_value(tags_val)
+            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        let category = MetricCategory::from_str(&category_str);
+        let source = MetricSource::from_str(&source_str);
+
+        Ok(Self {
+            id,
+            name,
+            value,
+            unit,
+            category,
+            tags,
+            recorded_at,
+            source,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricCategory {
     Revenue,
@@ -40,7 +69,30 @@ pub enum MetricSource {
     #[default]
     Database,
     ExternalApi,
+    #[default]
     Manual,
+}
+
+impl MetricSource {
+    pub fn as_str(&self) -> String {
+        match self {
+            Self::OnChain => "on_chain".to_string(),
+            Self::OffChain => "off_chain".to_string(),
+            Self::Database => "database".to_string(),
+            Self::ExternalApi => "external_api".to_string(),
+            Self::Manual => "manual".to_string(),
+        }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "on_chain" => Self::OnChain,
+            "off_chain" => Self::OffChain,
+            "database" => Self::Database,
+            "external_api" => Self::ExternalApi,
+            _ => Self::Manual,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

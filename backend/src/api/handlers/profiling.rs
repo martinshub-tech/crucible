@@ -225,7 +225,7 @@ pub async fn get_system_status(
 )]
 #[instrument(skip_all, fields(http.method = "POST", http.route = "/api/profile"))]
 pub async fn trigger_profile_collection(
-    State(_state): State<Arc<AppState>>, 
+    State(_state): State<Arc<AppState>>,
     ValidatedJson(payload): ValidatedJson<ProfileTriggerRequest>,
 ) -> ApiResponse<ProfileTriggerResponse> {
     let profile_id = uuid::Uuid::new_v4();

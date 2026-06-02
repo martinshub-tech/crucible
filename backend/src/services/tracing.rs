@@ -145,7 +145,6 @@ impl TracingService {
                 EnvFilter::try_from_default_env()
                     .unwrap_or_else(|_| EnvFilter::new("info,crucible=debug")),
             )
-            .with(telemetry_layer)
             .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr));
 
         tracing::subscriber::set_global_default(subscriber)

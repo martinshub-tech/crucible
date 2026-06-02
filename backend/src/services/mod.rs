@@ -1,7 +1,17 @@
 pub mod alerts;
+pub mod analytics_aggregator;
 pub mod business_metrics;
 pub mod error_recovery;
+pub mod event_indexer;
 pub mod feature_flags;
 pub mod log_aggregator;
+pub mod log_alerts;
+pub mod security_scanner;
 pub mod sys_metrics;
 pub mod tracing;
+pub mod sys_metrics;
+pub mod tracing;
+pub mod compilation;
+pub mod dependency_analyzer;
+pub mod contract_call_logger;
+pub mod compliance;
