@@ -16,6 +16,7 @@ use backend::{
     services::{
         error_recovery::ErrorManager, log_aggregator::LogAggregator, log_alerts::AlertManager,
         audit::AuditService,
+        contract_benchmark::ContractBenchmarkService,
         error_recovery::ErrorManager,
         log_aggregator::LogAggregator,
         log_alerts::AlertManager,
@@ -91,6 +92,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let (log_aggregator, log_receiver) = LogAggregator::new();
     let log_aggregator = Arc::new(log_aggregator);
     let sandbox_service = Arc::new(ContractSandboxService::default());
+    let contract_benchmark_service = Arc::new(ContractBenchmarkService::new());
 
     tokio::spawn(MetricsExporter::run_collector(metrics_exporter.clone()));
     tokio::spawn(LogAggregator::run_worker(log_receiver));
@@ -122,6 +124,7 @@ async fn main() -> Result<(), anyhow::Error> {
         error_manager: error_manager.clone(),
         config_manager: config_manager.clone(),
         log_aggregator: log_aggregator.clone(),
+        contract_benchmark_service: contract_benchmark_service.clone(),
         redis: redis_client.clone(),
     });
 
@@ -212,6 +215,10 @@ async fn main() -> Result<(), anyhow::Error> {
                 .route("/prometheus", get(profiling::get_prometheus_metrics))
                 .route("/status", get(profiling::get_system_status))
                 .route("/profile", post(profiling::trigger_profile_collection))
+                .route(
+                    "/contracts/benchmark",
+                    post(profiling::run_contract_benchmark),
+                )
                 .with_state(state.clone()),
         )
         .route("/api/status", get(profiling::get_system_status))
@@ -334,6 +341,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 pool.close().await;
             }
             tracing::info!("Flushing tracing provider and releasing service clients");
+            drop(db_pool); // This closes the pool when all clones are released
+
+            drop(redis_conn_dashboard); // This closes the dashboard connection manager
 
             tracing::info!("Graceful shutdown completed successfully");
 

@@ -26,6 +26,10 @@ use crate::api::contracts::{
 use crate::config::reload::ConfigManager;
 use crate::error::AppError;
 use crate::services::{
+    contract_benchmark::{
+        ContractBenchmarkError, ContractBenchmarkReport, ContractBenchmarkRequest,
+        ContractBenchmarkService,
+    },
     error_recovery::ErrorManager,
     log_aggregator::LogAggregator,
     sys_metrics::MetricsExporter,
@@ -74,6 +78,7 @@ pub struct AppState {
     /// Async log aggregation pipeline.
     pub log_aggregator: Arc<LogAggregator>,
     /// Redis client for caching.
+    pub contract_benchmark_service: Arc<ContractBenchmarkService>,
     pub redis: RedisClient,
 }
 
@@ -208,8 +213,14 @@ pub async fn get_health(
 #[instrument(skip_all)]
     info!("Performing system health check");
     let db_healthy = if let Some(ref pool) = state.db {
+
+    // Check database connectivity with tracing
+    let db_span = TracingService::db_query_span("SELECT 1", "postgres", "PING");
+    let _db_enter = db_span.enter();
+
+    let db_healthy = if let Some(db) = &state.db {
         sqlx::query("SELECT 1")
-            .fetch_optional(pool)
+            .fetch_optional(db)
             .await
             .map(|r| r.is_some())
             .unwrap_or(false)
@@ -391,4 +402,23 @@ pub async fn get_system_status(State(state): State<Arc<AppState>>) -> impl IntoR
     info!(profile_id = %profile_id, "Profiling collection triggered");
         "message": "Profiling collection triggered",
         "profile_id": profile_id,
+/// Handler for contract performance benchmark aggregation.
+#[instrument(skip_all, fields(http.method = "POST", http.route = "/api/v1/profiling/contracts/benchmark"))]
+pub async fn run_contract_benchmark(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<ContractBenchmarkRequest>,
+) -> Result<ApiResponse<ContractBenchmarkReport>, AppError> {
+    let report = state
+        .contract_benchmark_service
+        .run_benchmark(payload)
+        .await
+        .map_err(map_contract_benchmark_error)?;
+
+    Ok(ApiResponse::new(report))
+}
+
+fn map_contract_benchmark_error(error: ContractBenchmarkError) -> AppError {
+    match error {
+        ContractBenchmarkError::Validation(message) => AppError::BadRequest(message),
+    }
 }

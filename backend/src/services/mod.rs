@@ -8,6 +8,7 @@ pub mod cache_metrics;
 pub mod circuit_breaker;
 pub mod compilation;
 pub mod compliance;
+pub mod contract_benchmark;
 pub mod contract_call_logger;
 pub mod contract_monitor;
 pub mod contract_registry;

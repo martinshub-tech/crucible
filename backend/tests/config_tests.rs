@@ -7,10 +7,28 @@ use backend::config::{
     reload::{handle_get_config, handle_reload, ConfigManager},
     AppConfig,
 };
-use backend::services::{error_recovery::ErrorManager, sys_metrics::MetricsExporter};
+use backend::services::{
+    contract_benchmark::ContractBenchmarkService, error_recovery::ErrorManager,
+    log_aggregator::LogAggregator, sys_metrics::MetricsExporter,
+};
 use hyper::{Request, StatusCode};
+use redis::Client as RedisClient;
 use std::sync::Arc;
 use tower::ServiceExt;
+
+fn test_state(config_manager: Arc<ConfigManager>) -> Arc<AppState> {
+    let (log_aggregator, _receiver) = LogAggregator::new();
+
+    Arc::new(AppState {
+        db: None,
+        metrics_exporter: Arc::new(MetricsExporter::new()),
+        error_manager: Arc::new(ErrorManager::new()),
+        config_manager,
+        log_aggregator: Arc::new(log_aggregator),
+        contract_benchmark_service: Arc::new(ContractBenchmarkService::new()),
+        redis: RedisClient::open("redis://127.0.0.1:1/").unwrap(),
+    })
+}
 
 #[tokio::test]
 async fn test_config_get_endpoint() {
@@ -24,6 +42,7 @@ async fn test_config_get_endpoint() {
         log_aggregator: Arc::new(backend::services::log_aggregator::LogAggregator::new().0),
         redis: redis::Client::open("redis://127.0.0.1/").unwrap(),
     });
+    let state = test_state(config_manager.clone());
 
     let app = Router::new()
         .route("/api/config", get(handle_get_config))
@@ -54,6 +73,7 @@ async fn test_config_reload_endpoint_no_file() {
         log_aggregator: Arc::new(backend::services::log_aggregator::LogAggregator::new().0),
         redis: redis::Client::open("redis://127.0.0.1/").unwrap(),
     });
+    let state = test_state(config_manager.clone());
 
     let app = Router::new()
         .route("/api/config/reload", post(handle_reload))
