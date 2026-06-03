@@ -13,6 +13,8 @@ pub mod contract_call_logger;
 pub mod contract_monitor;
 pub mod contract_registry;
 pub mod contract_upgrade;
+pub mod gas_optimizer;
+pub mod vulnerability_scanner;
 pub mod dedup;
 pub mod dependency_analyzer;
 pub mod doc_generator;
