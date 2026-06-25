@@ -201,6 +201,22 @@ impl MockToken {
         let client = TokenClient::new(&self.env, &self.address);
         client.transfer(from, to, &amount);
     }
+    
+    /// Transfers tokens from one account to another using an allowance (spender flow).
+    ///
+    /// # Arguments
+    ///
+    /// * `spender` - The address performing the transfer (must have allowance).
+    /// * `from` - The token owner's address.
+    /// * `to` - The recipient's address.
+    /// * `amount` - The amount to transfer (in smallest units).
+    ///
+    /// This method mocks all auths so the spender can act without explicit auth signatures.
+    pub fn transfer_from(&self, spender: &Address, from: &Address, to: &Address, amount: i128) {
+        self.env.mock_all_auths();
+        let client = TokenClient::new(&self.env, &self.address);
+        client.transfer_from(spender, from, to, &amount);
+    }
 
     /// Sets a new admin for the token contract.
     ///
@@ -349,4 +365,54 @@ mod tests {
 
         assert_eq!(token.balance(&alice.address()), 1_000_000_000);
     }
-}
+    #[test]
+    fn test_allowance_successful_transfer() {
+        let env = MockEnv::builder()
+            .with_account("alice", Stroops::from(0))
+            .with_account("bob", Stroops::from(0))
+            .with_account("spender", Stroops::from(0))
+            .build();
+
+        let token = MockToken::xlm(&env);
+        let alice = env.account("alice");
+        let bob = env.account("bob");
+        let spender = env.account("spender");
+
+        // Mint tokens to alice
+        token.mint(&alice.address(), 1_000_000);
+        // Approve spender to spend 500_000
+        token.approve(&alice.address(), &spender.address(), 500_000, 1000);
+        // Perform transfer_from
+        token.transfer_from(&spender.address(), &alice.address(), &bob.address(), 300_000);
+
+        // Verify balances
+        assert_eq!(token.balance(&alice.address()), 700_000);
+        assert_eq!(token.balance(&bob.address()), 300_000);
+        // Verify remaining allowance
+        assert_eq!(token.allowance(&alice.address(), &spender.address()), 200_000);
+    }
+
+    #[test]
+    fn test_insufficient_allowance_fails() {
+        let env = MockEnv::builder()
+            .with_account("alice", Stroops::from(0))
+            .with_account("bob", Stroops::from(0))
+            .with_account("spender", Stroops::from(0))
+            .build();
+
+        let token = MockToken::xlm(&env);
+        let alice = env.account("alice");
+        let bob = env.account("bob");
+        let spender = env.account("spender");
+
+        token.mint(&alice.address(), 500_000);
+        token.approve(&alice.address(), &spender.address(), 100_000, 1000);
+
+        // Expect panic due to insufficient allowance
+        let result = std::panic::catch_unwind(|| {
+            token.transfer_from(&spender.address(), &alice.address(), &bob.address(), 200_000);
+        });
+        assert!(result.is_err());
+    }
+
+    }
