@@ -1,8 +1,8 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, token, Address,
-    Env, Map, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, token,
+    Address, Env, Map, Symbol, Vec,
 };
 
 // Define storage keys
@@ -81,7 +81,11 @@ impl Treasury {
         depositor.require_auth();
 
         // Perform actual token transfer from depositor to this contract (treasury)
-        token::TokenClient::new(&env, &token).transfer(&depositor, &env.current_contract_address(), &amount);
+        token::Client::new(&env, &token).transfer(
+            &depositor,
+            &env.current_contract_address(),
+            &amount,
+        );
 
         // Update internal accounting only after successful transfer
         let mut balances: Map<(Address, Address), i128> =

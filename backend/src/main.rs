@@ -90,16 +90,179 @@ async fn main() -> Result<(), anyhow::Error> {
         config_manager: config_manager.clone(),
     };
 
-    let states = build_application_states(db_pool.clone(), redis_client.clone(), &shared_services);
+    let ApplicationStates {
+        profiling: profiling_state,
+        dashboard: dashboard_state,
+        coverage: coverage_state,
+        websocket: ws_state,
+        audit: audit_service,
+    } = build_application_states(db_pool.clone(), redis_client.clone(), &shared_services);
 
-    let app = build_router(
-        states,
-        config_manager,
-        db_pool.clone(),
-        redis_client.clone(),
-        sandbox_service,
-        &config,
-    );
+    #[derive(OpenApi)]
+    #[openapi(
+        paths(
+            profiling::get_metrics,
+            profiling::get_health,
+            dashboard::get_dashboard_metrics,
+            dashboard::get_contract_stats,
+            audit::list_audit_reports,
+            audit::get_audit_report,
+        ),
+        components(schemas(
+            profiling::MetricsReport,
+            profiling::HealthResponse,
+            dashboard::DashboardMetrics,
+            dashboard::ContractStats,
+            audit::AuditEventRecord,
+            audit::AuditEventRequest,
+        )),
+        tags(
+            (name = "profiling", description = "Performance and health monitoring endpoints"),
+            (name = "dashboard", description = "Dashboard metrics and analytics endpoints")
+        )
+        .route("/compliance-check", post(contracts::check_compliance))
+        .route(
+            "/logs",
+            post(contracts::log_contract_call).get(contracts::get_contract_logs),
+        )
+        .route("/upgrade-plan", post(contracts::create_upgrade_plan))
+        .route("/templates", get(contracts::get_templates));
+    )]
+    let coverage_router = Router::new()
+        .route("/", post(coverage::submit_coverage))
+        .route("/:project", get(coverage::get_latest_coverage))
+        .with_state(coverage_state);
+
+    let admin_router = Router::new()
+        .route(
+            "/system-stats",
+            get(backend::api::handlers::admin::get_system_stats),
+        )
+        .route(
+            "/maintenance",
+            post(backend::api::handlers::admin::set_maintenance_mode),
+        )
+        .route("/logs", get(backend::api::handlers::admin::get_admin_logs));
+
+    let cors = build_cors_layer(&config);
+
+    let app = Router::new()
+        .route("/", get(|| async { "Crucible Backend API" }))
+        .route("/.well-known/stellar.toml", get(stellar::get_stellar_toml))
+        .merge(
+            Router::new()
+                .route("/api/config", get(handle_get_config))
+                .route("/api/config/reload", post(handle_reload))
+                .with_state(config_manager),
+        )
+        .nest(
+            "/api/v1/profiling",
+            Router::new()
+                .route("/metrics", get(profiling::get_metrics))
+                .route("/health", get(profiling::get_health))
+                .route("/prometheus", get(profiling::get_prometheus_metrics))
+                .route("/status", get(profiling::get_system_status))
+                .route("/profile", post(profiling::trigger_profile_collection))
+                .route(
+                    "/contracts/benchmark",
+                    post(profiling::run_contract_benchmark),
+                )
+                .with_state(profiling_state.clone()),
+        )
+        .route("/api/status", get(profiling::get_system_status))
+        .route("/api/profile", post(profiling::trigger_profile_collection))
+        .with_state(profiling_state.clone())
+        .nest(
+            "/api/v1/dashboard",
+            Router::new()
+                .route("/", get(get_dashboard))
+                .route("/metrics", get(dashboard::get_dashboard_metrics))
+                .route(
+                    "/contracts/:contract_id/stats",
+                    get(dashboard::get_contract_stats),
+                )
+                .with_state(dashboard_state.clone()),
+        )
+        .nest("/api/v1/audit", audit::routes(audit_service))
+        .nest(
+            "/api/v1/contracts",
+            Router::new()
+                .route(
+                    "/compile",
+                    post(backend::api::handlers::contracts::compile_contract),
+                )
+                .route(
+                    "/analyze-dependencies",
+                    post(backend::api::handlers::contracts::analyze_dependencies),
+                )
+                .route(
+                    "/compliance-check",
+                    post(backend::api::handlers::contracts::check_compliance),
+                )
+                .route(
+                    "/logs",
+                    post(backend::api::handlers::contracts::log_contract_call)
+                        .get(backend::api::handlers::contracts::get_contract_logs),
+                )
+                .route(
+                    "/upgrade-plan",
+                    post(backend::api::handlers::contracts::create_upgrade_plan),
+                )
+                .route(
+                    "/templates",
+                    get(backend::api::handlers::contracts::get_templates),
+                )
+                .with_state(profiling_state.clone()),
+        )
+        .route(
+            "/api/v1/networks",
+            get(backend::api::handlers::contracts::get_networks),
+        )
+        .nest(
+            "/api/v1/admin",
+            Router::new()
+                .route(
+                    "/system-stats",
+                    get(backend::api::handlers::admin::get_system_stats),
+                )
+                .route(
+                    "/maintenance",
+                    post(backend::api::handlers::admin::set_maintenance_mode),
+                )
+                .route("/logs", get(backend::api::handlers::admin::get_admin_logs))
+                .with_state(profiling_state.clone()),
+        )
+        .nest(
+            "/api/v1/errors",
+            errors::error_analytics_routes(db_pool.clone(), redis_client.clone()),
+        )
+        .nest("/api/v1/contracts", contracts_router)
+        .route("/api/v1/networks", get(contracts::get_networks))
+        .nest("/api/v1/admin", admin_router)
+        .nest("/api/v1/sandbox", sandbox::routes(sandbox_service))
+        .nest(
+            "/api/v1/coverage",
+            Router::new()
+                .route("/", post(backend::api::handlers::coverage::submit_coverage))
+                .route(
+                    "/:project",
+                    get(backend::api::handlers::coverage::get_latest_coverage),
+                )
+                .with_state(coverage_state),
+        )
+        .route(
+            "/api/v1/ws/dashboard",
+            get(ws_dashboard_handler).with_state(ws_state),
+        )
+        .route("/api/dashboard", get(get_dashboard))
+        .with_state(dashboard_state)
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .layer(middleware::from_fn_with_state(
+            profiling_state,
+            logging_middleware,
+        ))
+        .layer(TraceLayer::new_for_http())
+        .layer(cors);
 
     let addr: SocketAddr = format!("{}:{}", config.server.host, config.server.port).parse()?;
     tracing::info!("Crucible backend listening on {addr}");
@@ -119,7 +282,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]
