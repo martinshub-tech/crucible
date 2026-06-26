@@ -1,5 +1,4 @@
 #![no_std]
-#![allow(deprecated)]
 use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
 
 /// Persistent state for the vesting schedule.
@@ -131,7 +130,7 @@ impl Vesting {
         }
         s.claimed += claimable;
         env.storage().instance().set(&DataKey::Schedule, &s);
-        token::Client::new(&env, &s.token).transfer(
+        token::TokenClient::new(&env, &s.token).transfer(
             &env.current_contract_address(),
             &s.beneficiary,
             &claimable,
@@ -153,7 +152,7 @@ impl Vesting {
         s.revoked = true;
         env.storage().instance().set(&DataKey::Schedule, &s);
         if unvested > 0 {
-            token::Client::new(&env, &s.token).transfer(
+            token::TokenClient::new(&env, &s.token).transfer(
                 &env.current_contract_address(),
                 &admin,
                 &unvested,
