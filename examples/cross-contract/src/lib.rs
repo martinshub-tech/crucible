@@ -8,7 +8,6 @@
 //! - [`Aggregator`] — calls `Router` to orchestrate multi-step workflows,
 //!   showing a two-level call chain.
 #![no_std]
-#![allow(deprecated)]
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short, token, Address, Env,
@@ -69,7 +68,7 @@ enum RouterKey {
 ///
 /// Demonstrates:
 /// - Calling another contract via a generated client (`CounterClient`).
-/// - Calling a token contract via `token::Client`.
+/// - Calling a token contract via `token::TokenClient`.
 /// - Storing cross-contract addresses in instance storage.
 #[contract]
 #[derive(Default)]
@@ -103,7 +102,7 @@ impl Router {
     pub fn route_transfer(env: Env, from: Address, to: Address, amount: i128) {
         from.require_auth();
         let token_addr: Address = env.storage().instance().get(&RouterKey::Token).unwrap();
-        token::Client::new(&env, &token_addr).transfer(&from, &to, &amount);
+        token::TokenClient::new(&env, &token_addr).transfer(&from, &to, &amount);
         env.events().publish((symbol_short!("routed"),), amount);
     }
 
