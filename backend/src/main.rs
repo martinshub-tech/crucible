@@ -72,6 +72,15 @@ async fn main() -> Result<(), anyhow::Error> {
         .backend(storage)
         .build_fn(monitor_transaction);
 
+    let health_cache = ConnectionManager::new(redis_client.clone()).await?;
+    let health_queue = ConnectionManager::new(redis_client.clone()).await?;
+
+    let health_state = health::HealthState {
+        db: db_pool.clone(),
+        cache: health_cache,
+        queue: health_queue,
+    };
+
     let shared_services = SharedServices {
         metrics_exporter,
         error_manager,
