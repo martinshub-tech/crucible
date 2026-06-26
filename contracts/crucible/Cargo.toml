@@ -2,6 +2,15 @@
 name = "crucible"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["soroban", "stellar", "testing", "smart-contracts", "test-utils"]
+categories = ["development-tools::testing"]
+
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -15,4 +24,5 @@ derive = ["dep:crucible-macros"]
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }
+soroban-env-host = { version = "26", features = ["testutils"] }
 crucible-macros = { workspace = true, optional = true }
