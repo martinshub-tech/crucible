@@ -239,3 +239,65 @@ mod tests {
         let _ = prepared.commit();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::env::{MockEnv, MockEnvBuilder, Stroops};
+    use soroban_sdk::Address;
+
+    #[test]
+    fn test_inspected_tx_borrows_local_client() {
+        let env = MockEnv::builder()
+            .with_account("alice", Stroops::xlm(10_000))
+            .build();
+
+        let alice = env.account("alice");
+        let address = alice.address();
+
+        // This works because simulate_inspect doesn't require 'static
+        let inspected = env.simulate_inspect(|| {
+            // We can borrow the address here
+            address.clone()
+        });
+
+        assert!(inspected.would_succeed());
+        assert_eq!(inspected.result(), Some(&address));
+    }
+
+    #[test]
+    fn test_simulated_tx_requires_static() {
+        let env = MockEnv::builder()
+            .with_account("alice", Stroops::xlm(10_000))
+            .build();
+
+        let alice = env.account("alice");
+        let address = alice.address();
+
+        // This requires 'static, so we need to clone or use Arc
+        let address_clone = address.clone();
+        let sim = env.simulate(move || {
+            // Must use owned data, not borrowed
+            address_clone
+        });
+
+        assert!(sim.would_succeed());
+        assert_eq!(sim.result(), Some(&address));
+    }
+
+    #[test]
+    fn test_inspected_tx_inspection_methods() {
+        let env = MockEnv::builder()
+            .with_account("alice", Stroops::xlm(10_000))
+            .build();
+
+        let inspected = env.simulate_inspect(|| {
+            env.account("alice").address()
+        });
+
+        assert!(inspected.would_succeed());
+        assert!(inspected.fee() >= 0);
+        assert!(inspected.instructions() > 0);
+        assert!(inspected.result().is_some());
+    }
+}

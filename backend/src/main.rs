@@ -1,4 +1,5 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
+use std::sync::Arc;
 
 use apalis::prelude::*;
 use apalis_redis::RedisStorage;
@@ -17,8 +18,8 @@ use backend::{
         AppConfig, Environment,
     },
     jobs::{monitor_transaction, TransactionMonitorJob},
+    router::build_router,
     services::{
-        audit,
         contract_benchmark::ContractBenchmarkService,
         error_recovery::ErrorManager,
         log_aggregator::LogAggregator,
@@ -32,13 +33,7 @@ use redis::aio::ConnectionManager;
 use redis::Client as RedisClient;
 use sqlx::PgPool;
 use tokio::signal;
-use tower_http::{
-    cors::{AllowOrigin, Any, CorsLayer},
-    trace::TraceLayer,
-};
 use tracing::info_span;
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
 
 /// OpenAPI document served at `/swagger-ui`.
 #[derive(OpenApi)]
@@ -85,7 +80,6 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     let _tracing_guard = TracingService::init(tracing_config)?;
-
     let _enter = info_span!("app.startup").entered();
 
     let db_pool = config
@@ -116,6 +110,15 @@ async fn main() -> Result<(), anyhow::Error> {
     let worker = WorkerBuilder::new("monitor-worker")
         .backend(storage)
         .build_fn(monitor_transaction);
+
+    let health_cache = ConnectionManager::new(redis_client.clone()).await?;
+    let health_queue = ConnectionManager::new(redis_client.clone()).await?;
+
+    let health_state = health::HealthState {
+        db: db_pool.clone(),
+        cache: health_cache,
+        queue: health_queue,
+    };
 
     let shared_services = SharedServices {
         metrics_exporter,
@@ -295,7 +298,9 @@ fn build_router(
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]
